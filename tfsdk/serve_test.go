@@ -185,7 +185,7 @@ func TestMarkComputedNilsAsUnknown(t *testing.T) {
 		}),
 	})
 
-	got, err := tftypes.Transform(input, markComputedNilsAsUnknown(context.Background(), s))
+	got, err := tftypes.Transform(input, markComputedNilsAsUnknown(context.Background(), input, s))
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 		return
@@ -751,6 +751,9 @@ func TestServerValidateProviderConfig(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 		})
@@ -1066,6 +1069,9 @@ func TestServerConfigureProvider(t *testing.T) {
 				t.Errorf("Expected Terraform version to be %q, got %q", tc.tfVersion, s.configuredTFVersion)
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 			if diff := cmp.Diff(s.configuredVal, tc.config); diff != "" {
@@ -1304,6 +1310,9 @@ func TestServerValidateResourceConfig(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 		})
@@ -1637,6 +1646,9 @@ func TestServerReadResource(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 			if diff := cmp.Diff(s.readResourceCurrentStateValue, tc.currentState); diff != "" {
@@ -1731,7 +1743,7 @@ func TestServerPlanResourceChange(t *testing.T) {
 					tftypes.NewValue(tftypes.String, "red"),
 					tftypes.NewValue(tftypes.String, "orange"),
 				}),
-				"created_timestamp": tftypes.NewValue(tftypes.String, "when the earth was young"),
+				"created_timestamp": tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 			}),
 		},
 		"one_nil_state_and_config": {
@@ -1912,7 +1924,7 @@ func TestServerPlanResourceChange(t *testing.T) {
 				}),
 			}),
 			proposedNewState: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
-				"id": tftypes.NewValue(tftypes.String, "123456"),
+				"id": tftypes.NewValue(tftypes.String, "1234567"),
 				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
 					"name":    tftypes.String,
 					"size_gb": tftypes.Number,
@@ -1929,11 +1941,28 @@ func TestServerPlanResourceChange(t *testing.T) {
 					}),
 				}),
 			}),
-			config:       tftypes.NewValue(testServeResourceTypeTwoType, nil),
+			config: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
+				"id": tftypes.NewValue(tftypes.String, "1234567"),
+				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
+					"name":    tftypes.String,
+					"size_gb": tftypes.Number,
+					"boot":    tftypes.Bool,
+				}}}, []tftypes.Value{
+					tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{
+						"name":    tftypes.String,
+						"size_gb": tftypes.Number,
+						"boot":    tftypes.Bool,
+					}}, map[string]tftypes.Value{
+						"name":    tftypes.NewValue(tftypes.String, "my-disk"),
+						"size_gb": tftypes.NewValue(tftypes.Number, 10),
+						"boot":    tftypes.NewValue(tftypes.Bool, false),
+					}),
+				}),
+			}),
 			resource:     "test_two",
 			resourceType: testServeResourceTypeTwoType,
 			expectedPlannedState: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
-				"id": tftypes.NewValue(tftypes.String, "123456"),
+				"id": tftypes.NewValue(tftypes.String, "1234567"),
 				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
 					"name":    tftypes.String,
 					"size_gb": tftypes.Number,
@@ -1974,50 +2003,16 @@ func TestServerPlanResourceChange(t *testing.T) {
 					}),
 				}),
 			}),
-			proposedNewState: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
-				"id": tftypes.NewValue(tftypes.String, "123456"),
-				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-					"name":    tftypes.String,
-					"size_gb": tftypes.Number,
-					"boot":    tftypes.Bool,
-				}}}, []tftypes.Value{
-					tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-						"name":    tftypes.String,
-						"size_gb": tftypes.Number,
-						"boot":    tftypes.Bool,
-					}}, map[string]tftypes.Value{
-						"name":    tftypes.NewValue(tftypes.String, "my-disk"),
-						"size_gb": tftypes.NewValue(tftypes.Number, 10),
-						"boot":    tftypes.NewValue(tftypes.Bool, false),
-					}),
-				}),
-			}),
-			config:       tftypes.NewValue(testServeResourceTypeTwoType, nil),
-			resource:     "test_two",
-			resourceType: testServeResourceTypeTwoType,
-			expectedPlannedState: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
-				"id": tftypes.NewValue(tftypes.String, "123456"),
-				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-					"name":    tftypes.String,
-					"size_gb": tftypes.Number,
-					"boot":    tftypes.Bool,
-				}}}, []tftypes.Value{
-					tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-						"name":    tftypes.String,
-						"size_gb": tftypes.Number,
-						"boot":    tftypes.Bool,
-					}}, map[string]tftypes.Value{
-						"name":    tftypes.NewValue(tftypes.String, "my-disk"),
-						"size_gb": tftypes.NewValue(tftypes.Number, 10),
-						"boot":    tftypes.NewValue(tftypes.Bool, false),
-					}),
-				}),
-			}),
+			proposedNewState: tftypes.NewValue(testServeResourceTypeTwoType, nil),
+			config:           tftypes.NewValue(testServeResourceTypeTwoType, nil),
+			resource:         "test_two",
+			resourceType:     testServeResourceTypeTwoType,
+			// when the config is null, the resource has been
+			// deleted, and the plan should reflect that
+			expectedPlannedState: tftypes.NewValue(testServeResourceTypeTwoType, nil),
 			modifyPlanFunc: func(ctx context.Context, req ModifyResourcePlanRequest, resp *ModifyResourcePlanResponse) {
-				resp.RequiresReplace = []*tftypes.AttributePath{tftypes.NewAttributePath().WithAttributeName("id")}
 				resp.AddWarning("I'm warning you", "You have been warned")
 			},
-			expectedRequiresReplace: []*tftypes.AttributePath{tftypes.NewAttributePath().WithAttributeName("id")},
 			expectedDiags: []*tfprotov6.Diagnostic{
 				{
 					Severity: tfprotov6.DiagnosticSeverityWarning,
@@ -2045,50 +2040,16 @@ func TestServerPlanResourceChange(t *testing.T) {
 					}),
 				}),
 			}),
-			proposedNewState: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
-				"id": tftypes.NewValue(tftypes.String, "123456"),
-				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-					"name":    tftypes.String,
-					"size_gb": tftypes.Number,
-					"boot":    tftypes.Bool,
-				}}}, []tftypes.Value{
-					tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-						"name":    tftypes.String,
-						"size_gb": tftypes.Number,
-						"boot":    tftypes.Bool,
-					}}, map[string]tftypes.Value{
-						"name":    tftypes.NewValue(tftypes.String, "my-disk"),
-						"size_gb": tftypes.NewValue(tftypes.Number, 10),
-						"boot":    tftypes.NewValue(tftypes.Bool, false),
-					}),
-				}),
-			}),
-			config:       tftypes.NewValue(testServeResourceTypeTwoType, nil),
-			resource:     "test_two",
-			resourceType: testServeResourceTypeTwoType,
-			expectedPlannedState: tftypes.NewValue(testServeResourceTypeTwoType, map[string]tftypes.Value{
-				"id": tftypes.NewValue(tftypes.String, "123456"),
-				"disks": tftypes.NewValue(tftypes.List{ElementType: tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-					"name":    tftypes.String,
-					"size_gb": tftypes.Number,
-					"boot":    tftypes.Bool,
-				}}}, []tftypes.Value{
-					tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{
-						"name":    tftypes.String,
-						"size_gb": tftypes.Number,
-						"boot":    tftypes.Bool,
-					}}, map[string]tftypes.Value{
-						"name":    tftypes.NewValue(tftypes.String, "my-disk"),
-						"size_gb": tftypes.NewValue(tftypes.Number, 10),
-						"boot":    tftypes.NewValue(tftypes.Bool, false),
-					}),
-				}),
-			}),
+			proposedNewState: tftypes.NewValue(testServeResourceTypeTwoType, nil),
+			config:           tftypes.NewValue(testServeResourceTypeTwoType, nil),
+			resource:         "test_two",
+			resourceType:     testServeResourceTypeTwoType,
+			// when the config is null, that means the resource has
+			// been deleted, so the plan should reflect that
+			expectedPlannedState: tftypes.NewValue(testServeResourceTypeTwoType, nil),
 			modifyPlanFunc: func(ctx context.Context, req ModifyResourcePlanRequest, resp *ModifyResourcePlanResponse) {
-				resp.RequiresReplace = []*tftypes.AttributePath{tftypes.NewAttributePath().WithAttributeName("id")}
 				resp.AddError("This is an error", "More details about the error")
 			},
-			expectedRequiresReplace: []*tftypes.AttributePath{tftypes.NewAttributePath().WithAttributeName("id")},
 			expectedDiags: []*tfprotov6.Diagnostic{
 				{
 					Severity: tfprotov6.DiagnosticSeverityError,
@@ -2778,6 +2739,9 @@ func TestServerPlanResourceChange(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 			gotPlannedState, err := got.PlannedState.Unmarshal(tc.resourceType)
@@ -3904,6 +3868,9 @@ func TestServerApplyResourceChange(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 			if s.applyResourceChangeCalledResourceType != tc.resource {
@@ -4195,6 +4162,9 @@ func TestServerValidateDataResourceConfig(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 		})
@@ -4417,6 +4387,9 @@ func TestServerReadDataSource(t *testing.T) {
 				return
 			}
 			if diff := cmp.Diff(got.Diagnostics, tc.expectedDiags); diff != "" {
+				for _, d := range got.Diagnostics {
+					t.Log(d.Detail)
+				}
 				t.Errorf("Unexpected diff in diagnostics (+wanted, -got): %s", diff)
 			}
 			if diff := cmp.Diff(s.readDataSourceConfigValue, tc.config); diff != "" {
